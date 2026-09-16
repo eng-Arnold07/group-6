@@ -32,7 +32,6 @@ st.markdown(
 def load_model():
     try:
         model = joblib.load('diabetes_model.pkl')
-        scaler = joblib.load('scaler.pkl')
         return model, scaler
     except FileNotFoundError:
         return None, None
