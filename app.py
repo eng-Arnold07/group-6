@@ -32,19 +32,19 @@ st.markdown(
 def load_model():
     try:
         model = joblib.load('diabetes_model.pkl')
-        return model, scaler
+        return model
     except FileNotFoundError:
-        return None, None
+        return None
 
     #header
 st.title("Group 6 Diabetes Prediction App")
 st.markdown("This app predicts whether a person is diabetic or not based on their health parameters.")
 
 #load model and scaler
-model, scaler = load_model()
+model = load_model()
 
-if model is None or scaler is None:
-    st.error("Model or Scaler not found.")
+if model is None:
+    st.error("Model not found.")
 
 
     #sidebar for user input
@@ -68,16 +68,15 @@ predict_btn = st.sidebar.button("Predict", type="primary", use_container_width=T
 #main content
 
 if predict_btn:
-    if model is not None and scaler is not None:
+    if model is not None:
         input_data = (pregnancies, glucose, blood_pressure, skin_thickness, insulin, bmi, diabetes_pedigree, age)
         input_data_as_numpy_array = np.asarray(input_data)
         input_data_reshaped = input_data_as_numpy_array.reshape(1, -1)
 
-        std_data = scaler.transform(input_data_reshaped)
-        prediction = model.predict(std_data)
+        prediction = model.predict(input_data_reshaped)
 
         try:
-            probabilities = model.predict_proba(std_data)[0]
+            probabilities = model.predict_proba(input_data_reshaped)[0]
             prob_negative = probabilities[0] * 100
             prob_positive = probabilities[1] * 100
         except:
