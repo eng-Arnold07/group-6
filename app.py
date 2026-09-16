@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import numpy as np
 import joblib
@@ -27,27 +28,28 @@ st.markdown(
     """,
     unsafe_allow_html=True)
 
-# Load the trained model and scaler
+# Load the trained model
 @st.cache_resource
 def load_model():
+    model_path = os.path.join(os.path.dirname(__file__), 'diabetes_model.pkl')
     try:
-        model = joblib.load('diabetes_model.pkl')
-        return model
-    except FileNotFoundError:
+        if os.path.exists(model_path):
+            return joblib.load(model_path)
+        return joblib.load('diabetes_model.pkl')
+    except Exception:
         return None
 
-    #header
+# header
 st.title("Group 6 Diabetes Prediction App")
 st.markdown("This app predicts whether a person is diabetic or not based on their health parameters.")
 
-#load model and scaler
+# load model
 model = load_model()
 
 if model is None:
-    st.error("Model not found.")
+    st.error("Model not found. Please ensure 'diabetes_model.pkl' is uploaded to the repository.")
 
-
-    #sidebar for user input
+# sidebar for user input
 st.sidebar.title("User Input Info")
 st.sidebar.subheader("Enter Details:")
 age = st.sidebar.slider("Age", 1, 100, 25)
@@ -61,115 +63,113 @@ insulin = st.sidebar.slider("Insulin Level", 0, 846, 100)
 bmi = st.sidebar.slider("BMI", 0.0, 67.1, 25.0)
 diabetes_pedigree = st.sidebar.slider("Diabetes Pedigree Function", 0.0, 2.42, 0.5)
 
-#predict button
+# predict button
 st.sidebar.subheader("Prediction:")
 predict_btn = st.sidebar.button("Predict", type="primary", use_container_width=True)
 
-#main content
-
+# main content
 if predict_btn:
-    if model is not None:
+    if model is None:
+        st.error("Model could not be loaded. Please ensure 'diabetes_model.pkl' is available.")
+    else:
         input_data = (pregnancies, glucose, blood_pressure, skin_thickness, insulin, bmi, diabetes_pedigree, age)
         input_data_as_numpy_array = np.asarray(input_data)
         input_data_reshaped = input_data_as_numpy_array.reshape(1, -1)
 
-        prediction = model.predict(input_data_reshaped)
+        raw_prediction = model.predict(input_data_reshaped)
+        prediction = int(raw_prediction[0]) if hasattr(raw_prediction, '__iter__') else int(raw_prediction)
 
         try:
             probabilities = model.predict_proba(input_data_reshaped)[0]
-            prob_negative = probabilities[0] * 100
-            prob_positive = probabilities[1] * 100
-        except:
-            prob_positive = 100 if prediction == 1 else 0
-            prob_negative = 100 - prob_positive
+            prob_negative = float(probabilities[0]) * 100
+            prob_positive = float(probabilities[1]) * 100
+        except Exception:
+            prob_positive = 100.0 if prediction == 1 else 0.0
+            prob_negative = 100.0 - prob_positive
 
-    #display results
-    st.subheader("Prediction Result:")
+        # display results
+        st.subheader("Prediction Result:")
 
-    col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([2, 1])
 
-    with col1:
-        if prediction == 0:
-            if prob_positive < 30:
-                st.success(f"Low risk of diabetes with a probability of {prob_positive:.2f}% - Not Diabetic.")
+        with col1:
+            if prediction == 0:
+                if prob_positive < 30:
+                    st.success(f"Low risk of diabetes with a probability of {prob_positive:.2f}% - Not Diabetic.")
+                else:
+                    st.warning(f"Moderate risk of diabetes with a probability of {prob_positive:.2f}% - Not Diabetic.")
             else:
-                st.warning(f"Moderate risk of diabetes with a probability of {prob_positive:.2f}% - Not Diabetic.")
+                if prob_positive > 70:
+                    st.error(f"High risk of diabetes with a probability of {prob_positive:.2f}% - Diabetic.")
+                else:
+                    st.warning(f"Moderate risk of diabetes with a probability of {prob_positive:.2f}% - Diabetic.")
 
-        else:
-            if prob_positive > 70:
-                st.error(f"High risk of diabetes with a probability of {prob_positive:.2f}% - Diabetic.")
-            else:
-                st.warning(f"Moderate risk of diabetes with a probability of {prob_positive:.2f}% - Diabetic.")
+        # probability Breakdown
+        st.subheader("Probability Breakdown:")
+        pcol1, gcol = st.columns(2)
+        pcol1.metric("Probability of Not Diabetic", f"{prob_negative:.2f}%")
+        pcol1.metric("Probability of Diabetic", f"{prob_positive:.2f}%")
 
-    #probability Breakdown
-
-    st.subheader("Probability Breakdown:")
-    pcol1, col2 = st.columns(2)
-    pcol1.metric("Probability of Not Diabetic", f"{prob_negative:.2f}%")
-    pcol1.metric("Probability of Diabetic", f"{prob_positive:.2f}%")
-
-    with col2:
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=prob_positive,
-            title={'text': "Diabetic Probability"},
-            gauge={'axis': {'range': [0, 100]},
-                   'bar': {'color': "red"},
-                   'steps': [
-                       {'range': [0, 30], 'color': "green"},
-                       {'range': [30, 70], 'color': "yellow"},
-                       {'range': [70, 100], 'color': "red"}],
+        with gcol:
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=prob_positive,
+                title={'text': "Diabetic Probability"},
+                gauge={'axis': {'range': [0, 100]},
+                       'bar': {'color': "red"},
+                       'steps': [
+                           {'range': [0, 30], 'color': "green"},
+                           {'range': [30, 70], 'color': "yellow"},
+                           {'range': [70, 100], 'color': "red"}],
                        'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': prob_positive}}))
-        fig.update_layout(height=400, width=400, margin=dict(l=20, r=20, t=50, b=20))
-        st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(height=400, width=400, margin=dict(l=20, r=20, t=50, b=20))
+            st.plotly_chart(fig, use_container_width=True)
 
-    #Risk Assessment
-    st.subheader("Risk Assessment:")
+        # Risk Assessment
+        st.subheader("Risk Assessment:")
 
-    risk_factors = []
-    positive_factors = []
+        risk_factors = []
+        positive_factors = []
 
-    if glucose > 125:
-        risk_factors.append("High Glucose Level")
-    elif glucose < 100:
-        positive_factors.append("Low Glucose Level")
+        if glucose > 125:
+            risk_factors.append("High Glucose Level")
+        elif glucose < 100:
+            positive_factors.append("Low Glucose Level")
 
-    if blood_pressure > 90:
-        risk_factors.append("High Blood Pressure")
-    elif 60<= blood_pressure <= 80:
-        positive_factors.append("Normal Blood Pressure")
+        if blood_pressure > 90:
+            risk_factors.append("High Blood Pressure")
+        elif 60 <= blood_pressure <= 80:
+            positive_factors.append("Normal Blood Pressure")
 
-    if bmi > 30:
-        risk_factors.append("High BMI")
-    elif 18.5 <= bmi <= 24.5:
-        positive_factors.append("Normal BMI")
+        if bmi > 30:
+            risk_factors.append("High BMI")
+        elif 18.5 <= bmi <= 24.5:
+            positive_factors.append("Normal BMI")
 
+        if age > 45:
+            risk_factors.append("Older Age")
+        elif age < 30:
+            positive_factors.append("Younger Age")
 
-    if age > 45:
-        risk_factors.append("Older Age")
-    elif age < 30:
-        positive_factors.append("Younger Age")
+        if risk_factors:
+            st.warning("Risk Factors Identified:")
+            for factor in risk_factors:
+                st.write(f"- {factor}")
+        else:
+            st.success("No significant risk factors identified.")
 
-    if risk_factors:
-        st.warning("Risk Factors Identified:")
-        for factor in risk_factors:
-            st.write(f"- {factor}")
-    else:
-        st.success("No significant risk factors identified.")
+        # Recommendations
+        st.subheader("Recommendations:")
+        if prediction == 1:
+            st.write("Based on the prediction, it is recommended to consult a healthcare professional for further evaluation and management of diabetes.")
+        else:
+            st.write("Maintain a healthy lifestyle, regular exercise, and balanced diet to prevent diabetes.")
 
-# Recommendations
-    st.subheader("Recommendations:")
-    if prediction == 1:
-        st.write("Based on the prediction, it is recommended to consult a healthcare professional for further evaluation and management of diabetes.")
-    else:
-        st.write("Maintain a healthy lifestyle, regular exercise, and balanced diet to prevent diabetes.") 
-
-# Disclaimer
-    st.subheader("Disclaimer:")
-    st.info("This prediction is based on a machine learning model and should" \
-    " not be considered as a definitive medical diagnosis. Please consult a " \
-    "healthcare professional for accurate assessment and advice.")
-
+        # Disclaimer
+        st.subheader("Disclaimer:")
+        st.info("This prediction is based on a machine learning model and should"
+                " not be considered as a definitive medical diagnosis. Please consult a "
+                "healthcare professional for accurate assessment and advice.")
 else:
     st.write("Please enter your details in the sidebar and click 'Predict' to see the results.")
     
